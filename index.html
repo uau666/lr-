@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LR语法分析器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-section {
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result-section {
+            margin-top: 20px;
+        }
+        .result-box {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LR语法分析器</h1>
+        <div class="input-section">
+            <h2>输入表达式</h2>
+            <textarea id="expression" placeholder="请输入要分析的表达式，例如：a + b * c"></textarea>
+            <button onclick="analyzeExpression()">分析</button>
+        </div>
+        <div class="result-section">
+            <h2>分析结果</h2>
+            <div class="result-box">
+                <h3>词法分析结果：</h3>
+                <pre id="lexer-result"></pre>
+            </div>
+            <div class="result-box">
+                <h3>语法分析结果：</h3>
+                <pre id="parser-result"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 词法分析器
+        class Token {
+            constructor(type, value) {
+                this.type = type;
+                this.value = value;
+            }
+        }
+
+        class Lexer {
+            constructor(text) {
+                this.text = text;
+                this.pos = 0;
+                this.currentChar = this.text[0];
+            }
+
+            advance() {
+                this.pos++;
+                this.currentChar = this.pos < this.text.length ? this.text[this.pos] : null;
+            }
+
+            skipWhitespace() {
+                while (this.currentChar && /\s/.test(this.currentChar)) {
+                    this.advance();
+                }
+            }
+
+            getNextToken() {
+                while (this.currentChar) {
+                    if (/\s/.test(this.currentChar)) {
+                        this.skipWhitespace();
+                        continue;
+                    }
+
+                    if (/[a-zA-Z]/.test(this.currentChar)) {
+                        return this.identifier();
+                    }
+
+                    if (this.currentChar === '+') {
+                        this.advance();
+                        return new Token('PLUS', '+');
+                    }
+
+                    if (this.currentChar === '*') {
+                        this.advance();
+                        return new Token('MULTIPLY', '*');
+                    }
+
+                    if (this.currentChar === '(') {
+                        this.advance();
+                        return new Token('LPAREN', '(');
+                    }
+
+                    if (this.currentChar === ')') {
+                        this.advance();
+                        return new Token('RPAREN', ')');
+                    }
+
+                    throw new Error('Invalid character: ' + this.currentChar);
+                }
+
+                return new Token('EOF', null);
+            }
+
+            identifier() {
+                let result = '';
+                while (this.currentChar && /[a-zA-Z0-9]/.test(this.currentChar)) {
+                    result += this.currentChar;
+                    this.advance();
+                }
+                return new Token('IDENTIFIER', result);
+            }
+        }
+
+        // 语法分析器
+        class LRParser {
+            constructor() {
+                this.productions = [];
+                this.firstSets = {};
+                this.followSets = {};
+                this.parsingTable = {};
+            }
+
+            addProduction(left, right) {
+                this.productions.push({ left, right });
+            }
+
+            computeFirstSets() {
+                // 简化的First集计算
+                this.firstSets = {
+                    'id': ['id'],
+                    '+': ['+'],
+                    '*': ['*'],
+                    '(': ['('],
+                    ')': [')'],
+                    '$': ['$']
+                };
+            }
+
+            computeFollowSets() {
+                // 简化的Follow集计算
+                this.followSets = {
+                    'E': ['$', '+', ')'],
+                    'T': ['$', '+', '*', ')'],
+                    'F': ['$', '+', '*', ')']
+                };
+            }
+
+            buildParsingTable() {
+                // 简化的分析表构建
+                this.parsingTable = {
+                    '0': { 'id': 's5', '(': 's4' },
+                    '1': { '+': 's6', '$': 'acc' },
+                    '2': { '+': 'r2', '*': 's7', '$': 'r2' },
+                    '3': { '+': 'r4', '*': 'r4', '$': 'r4' },
+                    '4': { 'id': 's5', '(': 's4' },
+                    '5': { '+': 'r6', '*': 'r6', '$': 'r6' },
+                    '6': { 'id': 's5', '(': 's4' },
+                    '7': { 'id': 's5', '(': 's4' },
+                    '8': { '+': 's6', ')': 's11' },
+                    '9': { '+': 'r1', '*': 's7', '$': 'r1' },
+                    '10': { '+': 'r3', '*': 'r3', '$': 'r3' },
+                    '11': { '+': 'r5', '*': 'r5', '$': 'r5' }
+                };
+            }
+
+            parse(tokens) {
+                let stack = ['0'];
+                let input = [...tokens];
+                let steps = [];
+
+                while (true) {
+                    let state = stack[stack.length - 1];
+                    let symbol = input[0];
+
+                    if (!this.parsingTable[state] || !this.parsingTable[state][symbol]) {
+                        return { success: false, steps };
+                    }
+
+                    let action = this.parsingTable[state][symbol];
+
+                    if (action === 'acc') {
+                        return { success: true, steps };
+                    }
+
+                    if (action.startsWith('s')) {
+                        let nextState = action.substring(1);
+                        stack.push(symbol);
+                        stack.push(nextState);
+                        input.shift();
+                        steps.push(`移进 ${symbol}，转移到状态 ${nextState}`);
+                    } else if (action.startsWith('r')) {
+                        let productionIndex = parseInt(action.substring(1)) - 1;
+                        let production = this.productions[productionIndex];
+                        let popCount = production.right.length * 2;
+                        
+                        for (let i = 0; i < popCount; i++) {
+                            stack.pop();
+                        }
+
+                        let currentState = stack[stack.length - 1];
+                        stack.push(production.left);
+                        
+                        let gotoState = this.parsingTable[currentState][production.left];
+                        if (!gotoState) {
+                            return { success: false, steps };
+                        }
+                        
+                        stack.push(gotoState.substring(1));
+                        steps.push(`规约 ${production.left} -> ${production.right.join(' ')}`);
+                    }
+                }
+            }
+        }
+
+        function analyzeExpression() {
+            const expression = document.getElementById('expression').value;
+            const lexerResult = document.getElementById('lexer-result');
+            const parserResult = document.getElementById('parser-result');
+
+            try {
+                // 词法分析
+                const lexer = new Lexer(expression);
+                const tokens = [];
+                let token;
+                
+                while ((token = lexer.getNextToken()).type !== 'EOF') {
+                    tokens.push(token);
+                }
+
+                // 显示词法分析结果
+                lexerResult.textContent = JSON.stringify(tokens, null, 2);
+
+                // 语法分析
+                const parser = new LRParser();
+                parser.addProduction('S', ['E']);
+                parser.addProduction('E', ['E', '+', 'T']);
+                parser.addProduction('E', ['T']);
+                parser.addProduction('T', ['T', '*', 'F']);
+                parser.addProduction('T', ['F']);
+                parser.addProduction('F', ['(', 'E', ')']);
+                parser.addProduction('F', ['id']);
+
+                parser.computeFirstSets();
+                parser.computeFollowSets();
+                parser.buildParsingTable();
+
+                const mappedTokens = tokens.map(token => {
+                    const tokenMap = {
+                        'IDENTIFIER': 'id',
+                        'PLUS': '+',
+                        'MULTIPLY': '*',
+                        'LPAREN': '(',
+                        'RPAREN': ')'
+                    };
+                    return tokenMap[token.type] || token.value;
+                });
+                mappedTokens.push('$');
+
+                const result = parser.parse(mappedTokens);
+                
+                // 显示语法分析结果
+                parserResult.textContent = result.success ? 
+                    '语法分析成功！\n分析步骤：\n' + result.steps.join('\n') :
+                    '语法分析失败！表达式不符合语法规则。';
+
+            } catch (error) {
+                lexerResult.textContent = '错误：' + error.message;
+                parserResult.textContent = '';
+            }
+        }
+    </script>
+</body>
+</html> 
